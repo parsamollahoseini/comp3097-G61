@@ -1,10 +1,11 @@
 import SwiftUI
+import CoreData
 
 struct AddEditTaskScreen: View {
     enum Mode {
         case add
         case edit(TaskItem)
-        
+
         var title: String {
             switch self {
             case .add: return "New Task"
@@ -12,10 +13,11 @@ struct AddEditTaskScreen: View {
             }
         }
     }
-    
+
     let mode: Mode
     @Environment(\.dismiss) private var dismiss
-    
+    @Environment(\.managedObjectContext) private var viewContext
+
     // Form state
     @State private var taskTitle: String = ""
     @State private var selectedCategory: TaskCategory = .personal
@@ -119,8 +121,7 @@ struct AddEditTaskScreen: View {
             // Bottom Buttons
             VStack(spacing: 10) {
                 Button {
-                    // Milestone 1: placeholder — save not implemented
-                    dismiss()
+                    saveTask()
                 } label: {
                     Text("Save Task")
                         .fontWeight(.semibold)
@@ -158,16 +159,41 @@ struct AddEditTaskScreen: View {
             }
         }
     }
+
+    // MARK: - Core Data Save Function
+    /// Saves the new task to Core Data
+    private func saveTask() {
+        // Create new Task entity in Core Data
+        let newTask = Task(context: viewContext)
+        newTask.id = UUID()
+        newTask.title = taskTitle
+        newTask.category = selectedCategory.rawValue
+        newTask.dueDate = dueDate
+        newTask.priority = selectedPriority.rawValue
+        newTask.isCompleted = false
+        newTask.createdAt = Date()
+
+        // Save to Core Data
+        do {
+            try viewContext.save()
+            print("✅ Task saved successfully: \(taskTitle)")
+            dismiss()
+        } catch {
+            print("❌ Error saving task: \(error.localizedDescription)")
+        }
+    }
 }
 
 #Preview("New Task") {
     NavigationStack {
         AddEditTaskScreen(mode: .add)
+            .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
     }
 }
 
 #Preview("Edit Task") {
     NavigationStack {
         AddEditTaskScreen(mode: .edit(TaskItem.sampleTasks[1]))
+            .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
     }
 }
