@@ -1,16 +1,22 @@
 import SwiftUI
+import CoreData
 
 struct CompletedTasksScreen: View {
-    // Hardcoded sample data for Milestone 1
-    private let completedTasks: [TaskItem] = TaskItem.sampleTasks.filter { $0.isCompleted }
-    
+    // Core Data: Fetch all completed tasks, sorted by completion date
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \Task.dueDate, ascending: false)],
+        predicate: NSPredicate(format: "isCompleted == %@", NSNumber(value: true)),
+        animation: .default
+    )
+    private var completedTasks: FetchedResults<Task>
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 10) {
                     ForEach(completedTasks) { task in
                         NavigationLink(destination: TaskDetailScreen(task: task)) {
-                            TaskCardView(task: task)
+                            TaskCardView(task: task.toTaskItem())
                         }
                         .buttonStyle(.plain)
                     }
@@ -27,4 +33,5 @@ struct CompletedTasksScreen: View {
 
 #Preview {
     CompletedTasksScreen()
+        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
 }

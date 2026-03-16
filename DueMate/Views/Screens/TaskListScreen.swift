@@ -63,7 +63,7 @@ private struct TaskDetailScreenWrapper: View {
     let task: Task
 
     var body: some View {
-        TaskDetailScreen(task: task.toTaskItem())
+        TaskDetailScreen(task: task)
     }
 }
 
