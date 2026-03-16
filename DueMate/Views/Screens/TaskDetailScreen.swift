@@ -1,41 +1,55 @@
 import SwiftUI
+import CoreData
 
 struct TaskDetailScreen: View {
-    let task: TaskItem
+    @ObservedObject var task: Task
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var viewContext
     @State private var showEditTask = false
-    
-    private var statusLabel: String {
-        task.status.rawValue
+
+    // Convert Core Data Task to TaskItem for UI display
+    private var taskItem: TaskItem {
+        TaskItem(
+            id: task.id ?? UUID(),
+            title: task.title ?? "Untitled",
+            category: TaskCategory(rawValue: task.category ?? "Personal") ?? .personal,
+            dueDate: task.dueDate ?? Date(),
+            priority: TaskPriority(rawValue: task.priority ?? "Medium") ?? .medium,
+            isCompleted: task.isCompleted
+        )
     }
-    
+
+    private var statusLabel: String {
+        taskItem.status.rawValue
+    }
+
     private var statusColor: Color {
-        switch task.status {
+        switch taskItem.status {
         case .overdue: return .red
         case .dueSoon: return .orange
         case .upcoming: return .green
         case .completed: return .green
         }
     }
-    
+
     private var formattedDueDate: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
-        return formatter.string(from: task.dueDate)
+        return formatter.string(from: taskItem.dueDate)
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 12) {
                     // Task Title Card
                     cardView {
-                        Text(task.title)
+                        Text(taskItem.title)
                             .font(.title2)
                             .fontWeight(.bold)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    
+
                     // Status Card
                     cardView {
                         VStack(alignment: .leading, spacing: 6) {
@@ -43,9 +57,9 @@ struct TaskDetailScreen: View {
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.secondary)
-                            
+
                             HStack(spacing: 6) {
-                                Image(systemName: task.status == .overdue ? "exclamationmark.circle" : "clock")
+                                Image(systemName: taskItem.status == .overdue ? "exclamationmark.circle" : "clock")
                                     .foregroundColor(statusColor)
                                 Text(statusLabel)
                                     .foregroundColor(statusColor)
@@ -54,7 +68,7 @@ struct TaskDetailScreen: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    
+
                     // Category Card
                     cardView {
                         VStack(alignment: .leading, spacing: 6) {
@@ -62,13 +76,13 @@ struct TaskDetailScreen: View {
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.secondary)
-                            
-                            Text(task.category.rawValue)
+
+                            Text(taskItem.category.rawValue)
                                 .font(.body)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    
+
                     // Due Date Card
                     cardView {
                         VStack(alignment: .leading, spacing: 6) {
@@ -76,14 +90,14 @@ struct TaskDetailScreen: View {
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.secondary)
-                            
+
                             Text(formattedDueDate)
                                 .font(.body)
                                 .foregroundColor(statusColor)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    
+
                     // Priority Card
                     cardView {
                         VStack(alignment: .leading, spacing: 6) {
@@ -91,8 +105,8 @@ struct TaskDetailScreen: View {
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.secondary)
-                            
-                            Text(task.priority.rawValue)
+
+                            Text(taskItem.priority.rawValue)
                                 .font(.caption)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
@@ -106,11 +120,11 @@ struct TaskDetailScreen: View {
                 }
                 .padding(16)
             }
-            
+
             // Bottom Action Buttons
             VStack(spacing: 10) {
                 Button {
-                    // Milestone 1: placeholder action
+                    markTaskComplete()
                 } label: {
                     HStack {
                         Image(systemName: "checkmark.circle")
@@ -123,9 +137,9 @@ struct TaskDetailScreen: View {
                     .background(Color(.darkGray))
                     .cornerRadius(12)
                 }
-                
+
                 Button {
-                    // Milestone 1: placeholder action
+                    deleteTask()
                 } label: {
                     HStack {
                         Image(systemName: "trash")
@@ -155,10 +169,10 @@ struct TaskDetailScreen: View {
             }
         }
         .navigationDestination(isPresented: $showEditTask) {
-            AddEditTaskScreen(mode: .edit(task))
+            AddEditTaskScreen(mode: .edit(taskItem))
         }
     }
-    
+
     // MARK: - Card helper
     @ViewBuilder
     private func cardView<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -168,10 +182,49 @@ struct TaskDetailScreen: View {
             .cornerRadius(10)
             .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 1)
     }
+
+    // MARK: - Core Data Mark Complete Function
+    /// Marks the task as completed in Core Data
+    private func markTaskComplete() {
+        task.isCompleted = true
+
+        do {
+            try viewContext.save()
+            print("Task marked complete: \(task.title ?? "Unknown")")
+            dismiss()
+        } catch {
+            print("Error marking task complete: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Core Data Delete Function
+    /// Deletes the task from Core Data
+    private func deleteTask() {
+        viewContext.delete(task)
+
+        do {
+            try viewContext.save()
+            print("Task deleted: \(task.title ?? "Unknown")")
+            dismiss()
+        } catch {
+            print("Error deleting task: \(error.localizedDescription)")
+        }
+    }
 }
 
 #Preview {
-    NavigationStack {
-        TaskDetailScreen(task: TaskItem.sampleTasks[1])
+    let context = PersistenceController.preview.container.viewContext
+    let task = Task(context: context)
+    task.id = UUID()
+    task.title = "Sample Task for Preview"
+    task.category = "Work"
+    task.dueDate = Date()
+    task.priority = "High"
+    task.isCompleted = false
+    task.createdAt = Date()
+
+    return NavigationStack {
+        TaskDetailScreen(task: task)
+            .environment(\.managedObjectContext, context)
     }
 }
