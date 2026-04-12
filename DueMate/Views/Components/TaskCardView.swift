@@ -24,7 +24,7 @@ struct TaskCardView: View {
     private var dueDateText: String {
         let formatter = DateFormatter()
         let calendar = Calendar.current
-        
+
         if calendar.isDateInToday(task.dueDate) {
             formatter.dateFormat = "'Today,' h:mm a"
         } else if calendar.isDateInTomorrow(task.dueDate) {
@@ -32,8 +32,16 @@ struct TaskCardView: View {
         } else {
             formatter.dateFormat = "MMM d, h:mm a"
         }
-        
+
         return formatter.string(from: task.dueDate)
+    }
+
+    private var categoryColor: Color {
+        switch task.category {
+        case .work: return .blue
+        case .school: return .purple
+        case .personal: return .green
+        }
     }
     
     var body: some View {
@@ -51,13 +59,14 @@ struct TaskCardView: View {
                     .strikethrough(task.isCompleted)
                 
                 HStack(spacing: 8) {
-                    // Category badge
+                    // Category badge with color coding
                     Text(task.category.rawValue)
                         .font(.caption2)
                         .fontWeight(.medium)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(Color(.systemGray5))
+                        .background(categoryColor.opacity(0.2))
+                        .foregroundColor(categoryColor)
                         .cornerRadius(4)
                     
                     // Due date
