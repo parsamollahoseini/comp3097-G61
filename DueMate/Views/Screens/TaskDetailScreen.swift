@@ -6,8 +6,8 @@ struct TaskDetailScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
     @State private var showEditTask = false
+    @State private var showDeleteConfirm = false
 
-    // Convert Core Data Task to TaskItem for UI display
     private var taskItem: TaskItem {
         TaskItem(
             id: task.id ?? UUID(),
@@ -19,9 +19,7 @@ struct TaskDetailScreen: View {
         )
     }
 
-    private var statusLabel: String {
-        taskItem.status.rawValue
-    }
+    private var statusLabel: String { taskItem.status.rawValue }
 
     private var statusColor: Color {
         switch taskItem.status {
@@ -29,6 +27,14 @@ struct TaskDetailScreen: View {
         case .dueSoon: return .orange
         case .upcoming: return .green
         case .completed: return .green
+        }
+    }
+
+    private var priorityColor: Color {
+        switch taskItem.priority {
+        case .high: return .red
+        case .medium: return .orange
+        case .low: return .blue
         }
     }
 
@@ -42,15 +48,14 @@ struct TaskDetailScreen: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 12) {
-                    // Task Title Card
                     cardView {
                         Text(taskItem.title)
                             .font(.title2)
                             .fontWeight(.bold)
+                            .strikethrough(taskItem.isCompleted)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    // Status Card
                     cardView {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("STATUS")
@@ -59,7 +64,7 @@ struct TaskDetailScreen: View {
                                 .foregroundColor(.secondary)
 
                             HStack(spacing: 6) {
-                                Image(systemName: taskItem.status == .overdue ? "exclamationmark.circle" : "clock")
+                                Image(systemName: taskItem.status == .overdue ? "exclamationmark.circle" : (taskItem.status == .completed ? "checkmark.circle.fill" : "clock"))
                                     .foregroundColor(statusColor)
                                 Text(statusLabel)
                                     .foregroundColor(statusColor)
@@ -69,28 +74,23 @@ struct TaskDetailScreen: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    // Category Card
                     cardView {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("CATEGORY")
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.secondary)
-
-                            Text(taskItem.category.rawValue)
-                                .font(.body)
+                            Text(taskItem.category.rawValue).font(.body)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    // Due Date Card
                     cardView {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("DUE DATE & TIME")
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.secondary)
-
                             Text(formattedDueDate)
                                 .font(.body)
                                 .foregroundColor(statusColor)
@@ -98,21 +98,19 @@ struct TaskDetailScreen: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    // Priority Card
                     cardView {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("PRIORITY")
                                 .font(.caption)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.secondary)
-
                             Text(taskItem.priority.rawValue)
                                 .font(.caption)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 6)
-                                .background(Color(.systemGray))
+                                .background(priorityColor)
                                 .cornerRadius(6)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -121,32 +119,31 @@ struct TaskDetailScreen: View {
                 .padding(16)
             }
 
-            // Bottom Action Buttons
             VStack(spacing: 10) {
                 Button {
-                    markTaskComplete()
+                    toggleCompletion()
                 } label: {
                     HStack {
-                        Image(systemName: "checkmark.circle")
-                        Text("Mark as Completed")
+                        Image(systemName: taskItem.isCompleted ? "arrow.uturn.backward.circle" : "checkmark.circle")
+                        Text(taskItem.isCompleted ? "Restore Task" : "Mark as Completed")
                     }
                     .fontWeight(.semibold)
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(Color(.darkGray))
+                    .background(taskItem.isCompleted ? Color.blue : Color(.darkGray))
                     .cornerRadius(12)
                 }
 
                 Button {
-                    deleteTask()
+                    showDeleteConfirm = true
                 } label: {
                     HStack {
                         Image(systemName: "trash")
                         Text("Delete Task")
                     }
                     .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                    .foregroundColor(.red)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(Color(.systemGray6))
@@ -171,9 +168,14 @@ struct TaskDetailScreen: View {
         .navigationDestination(isPresented: $showEditTask) {
             AddEditTaskScreen(mode: .edit(taskItem))
         }
+        .alert("Delete Task?", isPresented: $showDeleteConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) { deleteTask() }
+        } message: {
+            Text("This will permanently delete the task.")
+        }
     }
 
-    // MARK: - Card helper
     @ViewBuilder
     private func cardView<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
@@ -183,28 +185,20 @@ struct TaskDetailScreen: View {
             .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 1)
     }
 
-    // MARK: - Core Data Mark Complete Function
-    /// Marks the task as completed in Core Data
-    private func markTaskComplete() {
-        task.isCompleted = true
-
+    private func toggleCompletion() {
+        task.isCompleted.toggle()
         do {
             try viewContext.save()
-            print("Task marked complete: \(task.title ?? "Unknown")")
             dismiss()
         } catch {
-            print("Error marking task complete: \(error.localizedDescription)")
+            print("Error updating task: \(error.localizedDescription)")
         }
     }
 
-    // MARK: - Core Data Delete Function
-    /// Deletes the task from Core Data
     private func deleteTask() {
         viewContext.delete(task)
-
         do {
             try viewContext.save()
-            print("Task deleted: \(task.title ?? "Unknown")")
             dismiss()
         } catch {
             print("Error deleting task: \(error.localizedDescription)")

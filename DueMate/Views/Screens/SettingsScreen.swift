@@ -1,57 +1,106 @@
 import SwiftUI
+import CoreData
+
+enum TaskSortOrder: String, CaseIterable, Identifiable {
+    case dueDate = "Due Date"
+    case priority = "Priority"
+    var id: String { rawValue }
+}
 
 struct SettingsScreen: View {
+    @Environment(\.managedObjectContext) private var viewContext
+    @AppStorage("taskSortOrder") private var sortOrderRaw: String = TaskSortOrder.dueDate.rawValue
+
+    @State private var showClearConfirm = false
+    @State private var clearResultMessage: String?
+    @State private var showClearResult = false
+
+    private var sortOrder: Binding<TaskSortOrder> {
+        Binding(
+            get: { TaskSortOrder(rawValue: sortOrderRaw) ?? .dueDate },
+            set: { sortOrderRaw = $0.rawValue }
+        )
+    }
+
     var body: some View {
         NavigationStack {
             List {
-                NavigationLink(destination: SettingsDetailScreen(title: "Notifications")) {
-                    Label("Notifications", systemImage: "bell")
+                Section("Sort Tasks By") {
+                    Picker("Sort Order", selection: sortOrder) {
+                        ForEach(TaskSortOrder.allCases) { order in
+                            Text(order.rawValue).tag(order)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
-                
-                NavigationLink(destination: SettingsDetailScreen(title: "Account Settings")) {
-                    Label("Account Settings", systemImage: "person.circle")
+
+                Section("Manage Completed") {
+                    Button(role: .destructive) {
+                        showClearConfirm = true
+                    } label: {
+                        Label("Clear All Completed Tasks", systemImage: "trash")
+                    }
                 }
-                
-                NavigationLink(destination: SettingsDetailScreen(title: "About")) {
-                    Label("About", systemImage: "info.circle")
-                }
-                
-                NavigationLink(destination: SettingsDetailScreen(title: "Privacy Policy")) {
-                    Label("Privacy Policy", systemImage: "lock.shield")
+
+                Section("About") {
+                    HStack {
+                        Label("App", systemImage: "app.badge")
+                        Spacer()
+                        Text("DueMate").foregroundColor(.secondary)
+                    }
+                    HStack {
+                        Label("Version", systemImage: "number")
+                        Spacer()
+                        Text(appVersion).foregroundColor(.secondary)
+                    }
+                    HStack {
+                        Label("Team", systemImage: "person.3")
+                        Spacer()
+                        Text("G61").foregroundColor(.secondary)
+                    }
                 }
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .alert("Clear All Completed Tasks?", isPresented: $showClearConfirm) {
+                Button("Cancel", role: .cancel) { }
+                Button("Clear", role: .destructive) { clearAllCompleted() }
+            } message: {
+                Text("This permanently deletes every completed task. This cannot be undone.")
+            }
+            .alert("Done", isPresented: $showClearResult, presenting: clearResultMessage) { _ in
+                Button("OK", role: .cancel) { }
+            } message: { message in
+                Text(message)
+            }
         }
     }
-}
 
-// MARK: - Settings Detail (Placeholder for Milestone 1)
-struct SettingsDetailScreen: View {
-    let title: String
-    
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "wrench.and.screwdriver")
-                .font(.system(size: 48))
-                .foregroundColor(.secondary)
-            
-            Text(title)
-                .font(.title2)
-                .fontWeight(.semibold)
-            
-            Text("Coming in a future milestone.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+    private var appVersion: String {
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return "\(v) (\(b))"
+    }
+
+    private func clearAllCompleted() {
+        let request: NSFetchRequest<Task> = Task.fetchRequest()
+        request.predicate = NSPredicate(format: "isCompleted == %@", NSNumber(value: true))
+        do {
+            let completed = try viewContext.fetch(request)
+            let count = completed.count
+            for task in completed { viewContext.delete(task) }
+            try viewContext.save()
+            clearResultMessage = count == 0 ? "No completed tasks to clear." : "Cleared \(count) completed task\(count == 1 ? "" : "s")."
+            showClearResult = true
+        } catch {
+            clearResultMessage = "Error: \(error.localizedDescription)"
+            showClearResult = true
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground))
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 #Preview {
     SettingsScreen()
+        .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
 }
